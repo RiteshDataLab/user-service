@@ -26,7 +26,7 @@ jobs:
       - name: Build and Push Docker Image
         run: |
           docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fastapi-repo/user-service:${{ github.sha }} .
-          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GAR_REPO_NAME }}/user-service:${{ github.sha }}
+          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fastapi-repo/user-service:${{ github.sha }}
 
       - name: Deploy to GKE
         run: |
