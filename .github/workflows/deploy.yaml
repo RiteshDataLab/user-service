@@ -40,7 +40,7 @@ jobs:
 
     - name: Deploy to GKE
       run: |
-        IMAGE_TAG=${{ github.sha }}
+        IMAGE_TAG=${{ github.sha }}.
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
