@@ -36,6 +36,7 @@ jobs:
 
     - name: Authenticate kubectl with GKE
       run: |
+        # Use --region for Autopilot (regional) clusters
         gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} \
           --region ${{ secrets.GKE_REGION }} \
           --project ${{ secrets.GCP_PROJECT_ID }}
@@ -47,6 +48,5 @@ jobs:
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
         kubectl apply -f k8s/hpa.yaml
-        kubectl set image deployment/auth-service \
-          -n auth-namespace \
+        kubectl set image deployment/auth-service -n auth-namespace \
           auth-container=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fastapi-repo/auth-service:$IMAGE_TAG
