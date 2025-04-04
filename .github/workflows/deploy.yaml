@@ -1,4 +1,4 @@
-name: Deploy User Service  # Change this for each microservice
+name: Deploy Auth Microservice to GKE
 
 on:
   push:
@@ -6,31 +6,69 @@ on:
       - main
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+    - name: Checkout Code
+      uses: actions/checkout@v3
 
-      - name: Authenticate with Google Cloud
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+    - name: Authenticate with GCP
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Configure kubectl
-        run: |
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
-            --zone ${{ secrets.GKE_CLUSTER_ZONE }} \
-            --project ${{ secrets.GCP_PROJECT_ID }}
+    - name: Set Up gcloud CLI
+      uses: google-github-actions/setup-gcloud@v1
 
-      - name: Build and Push Docker Image
-        run: |
-          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fastapi-repo/user-service:${{ github.sha }} .
-          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fastapi-repo/user-service:${{ github.sha }}
+    - name: Upgrade gcloud CLI
+      run: |
+        gcloud components update gke-gcloud-auth-plugin
 
-      - name: Deploy to GKE
-        run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/service.yaml
-          kubectl apply -f k8s/hpa.yaml 
+    - name: Configure Docker
+      run: gcloud auth configure-docker us-central1-docker.pkg.dev
+
+    #  Install SonarQube Scanner
+    - name: Install SonarQube Scanner
+      run: |
+        echo " Installing SonarQube Scanner..."
+        SONAR_VERSION="7.0.0.4796"
+        DOWNLOAD_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-$SONAR_VERSION-linux-x64.zip"
+
+        curl -fSL -o sonar-scanner.zip "$DOWNLOAD_URL"
+        unzip sonar-scanner.zip
+        sudo mv sonar-scanner-* /opt/sonar-scanner
+
+        echo 'export PATH="/opt/sonar-scanner/bin:$PATH"' | sudo tee -a /etc/profile
+        source /etc/profile
+
+        echo " SonarQube Scanner Installed Successfully"
+        /opt/sonar-scanner/bin/sonar-scanner --version
+
+    #  Run SonarQube Analysis
+    - name: Run SonarQube Analysis
+      run: |
+        /opt/sonar-scanner/bin/sonar-scanner \
+          -Dsonar.projectKey=auth-service \
+          -Dsonar.sources=app \
+          -Dsonar.host.url=http://35.226.115.150:9000/ \
+          -Dsonar.login=${{ secrets.SONARQUBE_TOKEN }}
+
+    - name: Build and Push Docker Image
+      run: |
+        IMAGE_TAG=${{ github.sha }}
+        docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fastapi-repo/auth-service:$IMAGE_TAG .
+        docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fastapi-repo/auth-service:$IMAGE_TAG
+
+    - name: Authenticate kubectl with GKE
+      run: |
+        gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --zone ${{ secrets.GKE_ZONE }} --project ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Deploy to GKE
+      run: |
+        IMAGE_TAG=${{ github.sha }}
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+        kubectl apply -f k8s/hpa.yaml
+        kubectl set image deployment/auth-service -n auth-namespace auth-container=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fastapi-repo/auth-service:$IMAGE_TAG
